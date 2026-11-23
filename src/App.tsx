@@ -4,6 +4,24 @@ import { BookOpen, LayoutDashboard, NotebookPen, FolderOpen, Presentation, Searc
 import { supabase } from './lib/supabase';
 
 type Sermon = { id:string; user_id:string; title:string; theme:string; date:string; status:string; content:string; created_at:string };
+type SermonDraft = { baseText:string; objective:string; introduction:string; points:string[]; conclusion:string; references:string; notes:string };
+const emptyDraft = ():SermonDraft => ({baseText:'',objective:'',introduction:'',points:['','',''],conclusion:'',references:'',notes:''});
+const readDraft = (raw:string):SermonDraft => {
+ try {
+  const parsed=JSON.parse(raw);
+  if(parsed?.format==='palavra-viva-v1') return {
+   ...emptyDraft(),
+   baseText:parsed.baseText||'',
+   objective:parsed.objective||'',
+   introduction:parsed.introduction||'',
+   points:Array.isArray(parsed.points)&&parsed.points.length?parsed.points:['','',''],
+   conclusion:parsed.conclusion||'',
+   references:parsed.references||'',
+   notes:parsed.notes||''
+  };
+ } catch {}
+ return {...emptyDraft(),notes:raw||''};
+};
 
 export default function App(){
  const [session,setSession]=useState<Session|null>(null);
@@ -20,7 +38,7 @@ export default function App(){
  const [mobile,setMobile]=useState(false);
  const [title,setTitle]=useState('');
  const [theme,setTheme]=useState('');
- const [content,setContent]=useState('');
+ const [draft,setDraft]=useState<SermonDraft>(emptyDraft());
  const [saving,setSaving]=useState(false);
  const [notice,setNotice]=useState('');
 
@@ -42,12 +60,12 @@ export default function App(){
  },[session]);
 
  const filtered=useMemo(()=>sermons.filter(s=>(s.title+' '+s.theme).toLowerCase().includes(query.toLowerCase())),[sermons,query]);
- const create=()=>{setActive(null);setTitle('');setTheme('');setContent('');setNotice('');setPage('Editor');};
- const edit=(s:Sermon)=>{setActive(s);setTitle(s.title);setTheme(s.theme);setContent(s.content);setNotice('');setPage('Editor');};
+ const create=()=>{setActive(null);setTitle('');setTheme('');setDraft(emptyDraft());setNotice('');setPage('Editor');};
+ const edit=(s:Sermon)=>{setActive(s);setTitle(s.title);setTheme(s.theme);setDraft(readDraft(s.content));setNotice('');setPage('Editor');};
  const save=async()=>{
   if(!title.trim()||!session?.user)return;
   setSaving(true);setNotice('');
-  const fields={title:title.trim(),theme:theme.trim()||'Sem categoria',date:new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'}),status:'Rascunho',content};
+  const fields={title:title.trim(),theme:theme.trim()||'Sem categoria',date:new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'}),status:'Rascunho',content:JSON.stringify({format:'palavra-viva-v1',...draft})};
   const result=active
    ? await supabase.from('sermons').update(fields).eq('id',active.id).select().single()
    : await supabase.from('sermons').insert({...fields,user_id:session.user.id}).select().single();
@@ -80,7 +98,23 @@ export default function App(){
   {mobile&&<div className="scrim" onClick={()=>setMobile(false)}/>}
   <main className="main"><header className="topbar"><button className="menu-btn" onClick={()=>setMobile(true)}><Menu/></button><div className="crumb">Workspace <ChevronRight size={14}/><b>{page}</b></div><div className="top-actions"><span className="cloud-status"><i/> Sincronizado na nuvem</span><button className="icon-btn"><Bell size={18}/></button><div className="avatar small">G</div></div></header>
   {notice&&<div style={{margin:'15px auto 0',width:'90%',maxWidth:1080,padding:12,borderRadius:8,background:'#f7f1e5',color:'#84672f',fontSize:12}}>{notice}</div>}
-  {page==='Editor'?<section className="content editor-page"><button className="back-link" onClick={()=>setPage('Mensagens')}><ArrowLeft size={16}/> Voltar às mensagens</button><div className="page-heading"><div><span className="eyebrow">EDITOR DE MENSAGEM</span><h1>{active?'Editar mensagem':'Nova mensagem'}</h1><p>Organize suas anotações e prepare sua próxima mensagem.</p></div><button className="primary" onClick={save} disabled={saving}><Save size={17}/> {saving?'Salvando...':'Salvar mensagem'}</button></div><div className="editor-card"><label>Título da mensagem</label><input className="title-input" placeholder="Ex.: A fé que move montanhas" value={title} onChange={e=>setTitle(e.target.value)}/><label>Tema ou categoria</label><input placeholder="Ex.: Fé, família, oração..." value={theme} onChange={e=>setTheme(e.target.value)}/><div className="editor-divider"/><div className="editor-toolbar"><b>Conteúdo da pregação</b><span>Escreva livremente suas anotações</span></div><textarea className="sermon-text" placeholder={'Texto bíblico:\n\nIntrodução\n\n1. Primeiro tópico\n\n2. Segundo tópico\n\nConclusão'} value={content} onChange={e=>setContent(e.target.value)}/><div className="editor-foot">Seu conteúdo é seu. A Palavra Viva não cria nem altera sua pregação.</div></div></section>
+  {page==='Editor'?<section className="content editor-page"><button className="back-link" onClick={()=>setPage('Mensagens')}><ArrowLeft size={16}/> Voltar às mensagens</button><div className="page-heading"><div><span className="eyebrow">EDITOR DE MENSAGEM</span><h1>{active?'Editar mensagem':'Nova mensagem'}</h1><p>Organize suas anotações e prepare sua próxima mensagem.</p></div><button className="primary" onClick={save} disabled={saving}><Save size={17}/> {saving?'Salvando...':'Salvar mensagem'}</button></div><div className="editor-card">
+ <div className="editor-section-heading"><div><b>Identificação</b><span>Comece organizando sua mensagem.</span></div></div>
+ <label>Título da mensagem</label><input className="title-input" placeholder="Ex.: A fé que move montanhas" value={title} onChange={e=>setTitle(e.target.value)}/>
+ <label>Tema ou categoria</label><input placeholder="Ex.: Fé, família, oração..." value={theme} onChange={e=>setTheme(e.target.value)}/>
+ <div className="editor-divider"/>
+ <div className="editor-section-heading"><div><b>Preparação da mensagem</b><span>Preencha os campos no seu ritmo. Você decide o conteúdo.</span></div></div>
+ <label>Texto bíblico base</label><textarea className="structured-textarea compact" placeholder="Ex.: João 15:1-8" value={draft.baseText} onChange={e=>setDraft(d=>({...d,baseText:e.target.value}))}/>
+ <label>Objetivo da mensagem</label><textarea className="structured-textarea compact" placeholder="O que você deseja transmitir à igreja?" value={draft.objective} onChange={e=>setDraft(d=>({...d,objective:e.target.value}))}/>
+ <label>Introdução</label><textarea className="structured-textarea" placeholder="Registre aqui a introdução da sua mensagem..." value={draft.introduction} onChange={e=>setDraft(d=>({...d,introduction:e.target.value}))}/>
+ <div className="editor-divider"/>
+ <div className="editor-section-heading"><div><b>Desenvolvimento</b><span>Organize o raciocínio em tópicos.</span></div><button type="button" className="add-point" onClick={()=>setDraft(d=>({...d,points:[...d.points,'']}))}><Plus size={15}/> Adicionar tópico</button></div>
+ <div className="outline-list">{draft.points.map((point,index)=><div className="outline-item" key={index}><span className="outline-number">{index+1}</span><textarea className="structured-textarea" placeholder={`Tópico ${index+1}: desenvolva sua anotação...`} value={point} onChange={e=>setDraft(d=>({...d,points:d.points.map((p,i)=>i===index?e.target.value:p)}))}/>{draft.points.length>1&&<button type="button" className="remove-point" title="Remover tópico" onClick={()=>setDraft(d=>({...d,points:d.points.filter((_,i)=>i!==index)}))}><X size={15}/></button>}</div>)}</div>
+ <label>Conclusão</label><textarea className="structured-textarea" placeholder="Registre como deseja concluir a mensagem..." value={draft.conclusion} onChange={e=>setDraft(d=>({...d,conclusion:e.target.value}))}/>
+ <label>Referências bíblicas complementares</label><textarea className="structured-textarea compact" placeholder="Ex.: Romanos 8:28; Filipenses 4:13; Salmos 23" value={draft.references} onChange={e=>setDraft(d=>({...d,references:e.target.value}))}/>
+ <label>Anotações pessoais</label><textarea className="structured-textarea" placeholder="Ideias, ilustrações, lembretes e observações..." value={draft.notes} onChange={e=>setDraft(d=>({...d,notes:e.target.value}))}/>
+ <div className="editor-foot">Seu conteúdo é seu. A Palavra Viva organiza suas anotações, mas não cria nem altera sua pregação.</div>
+ </div></section>
   :page==='Início'?<section className="content"><div className="welcome-row"><div><span className="eyebrow">SEU ESPAÇO DE TRABALHO</span><h1>Bem-vindo à Palavra Viva<span>.</span></h1><p>Seu espaço para preparar e organizar mensagens bíblicas.</p></div><button className="primary" onClick={create}><Plus size={18}/> Nova mensagem</button></div><div className="hero"><div className="hero-copy"><span className="hero-tag">SEU ESPAÇO DE PREPARAÇÃO</span><h2>Uma mensagem bem preparada<br/>começa com organização.</h2><p>Reúna suas anotações, referências bíblicas e ideias em um só lugar.</p><button className="hero-button" onClick={create}>Começar uma mensagem <ChevronRight size={17}/></button></div><div className="hero-art"><div className="art-circle"><BookOpen size={78} strokeWidth={1}/></div><span className="art-verse">“Lâmpada para os meus pés<br/>é a tua palavra...”<small> SALMOS 119:105</small></span></div></div>
    <div className="section-title"><div><h2>Visão geral</h2><p>Acompanhe seu material de estudo.</p></div></div><div className="stats"><div className="stat-card"><div className="stat-icon blue"><NotebookPen/></div><span>Mensagens salvas</span><strong>{sermons.length.toString().padStart(2,'0')}</strong><small>Na sua biblioteca</small></div><div className="stat-card"><div className="stat-icon gold"><BookMarked/></div><span>Temas estudados</span><strong>{new Set(sermons.map(s=>s.theme)).size.toString().padStart(2,'0')}</strong><small>Assuntos organizados</small></div><div className="stat-card"><div className="stat-icon green"><Presentation/></div><span>Apresentações</span><strong>00</strong><small>Prontas para projetar</small></div></div>
    <div className="section-title recent-title"><div><h2>Mensagens recentes</h2><p>Continue de onde você parou.</p></div><button className="text-button" onClick={()=>setPage('Mensagens')}>Ver todas <ChevronRight size={16}/></button></div><div className="sermon-list">{sermons.slice(0,3).map(s=><button className="sermon-row" key={s.id} onClick={()=>edit(s)}><div className="sermon-symbol"><BookOpen/></div><div className="sermon-info"><b>{s.title}</b><span>{s.theme} <i>•</i> {s.date}</span></div><span className={'pill '+(s.status==='Concluída'?'done':'draft')}>{s.status}</span><ChevronRight className="row-arrow" size={18}/></button>)}{!sermons.length&&<div className="empty">Suas mensagens salvas aparecerão aqui.</div>}</div>
