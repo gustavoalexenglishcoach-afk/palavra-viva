@@ -4,13 +4,14 @@ import { BookOpen, LayoutDashboard, NotebookPen, FolderOpen, Presentation, Searc
 import { supabase } from './lib/supabase';
 
 type Sermon = { id:string; user_id:string; title:string; theme:string; date:string; status:string; content:string; created_at:string };
-type SermonDraft = { baseText:string; objective:string; introduction:string; points:string[]; conclusion:string; references:string; notes:string };
-const emptyDraft = ():SermonDraft => ({baseText:'',objective:'',introduction:'',points:['','',''],conclusion:'',references:'',notes:''});
+type SermonDraft = { sermonType:string; baseText:string; objective:string; introduction:string; points:string[]; conclusion:string; references:string; notes:string };
+const emptyDraft = ():SermonDraft => ({sermonType:'',baseText:'',objective:'',introduction:'',points:['','',''],conclusion:'',references:'',notes:''});
 const readDraft = (raw:string):SermonDraft => {
  try {
   const parsed=JSON.parse(raw);
   if(parsed?.format==='palavra-viva-v1') return {
    ...emptyDraft(),
+   sermonType:parsed.sermonType||'',
    baseText:parsed.baseText||'',
    objective:parsed.objective||'',
    introduction:parsed.introduction||'',
@@ -102,6 +103,7 @@ export default function App(){
  <div className="editor-section-heading"><div><b>Identificação</b><span>Comece organizando sua mensagem.</span></div></div>
  <label>Título da mensagem</label><input className="title-input" placeholder="Ex.: A fé que move montanhas" value={title} onChange={e=>setTitle(e.target.value)}/>
  <label>Tema ou categoria</label><input placeholder="Ex.: Fé, família, oração..." value={theme} onChange={e=>setTheme(e.target.value)}/>
+ <label>Tipo de pregação</label><select className="title-input" value={draft.sermonType} onChange={e=>setDraft(d=>({...d,sermonType:e.target.value}))}><option value="">Não definido</option><option value="Expositiva">Expositiva</option><option value="Temática">Temática</option><option value="Textual">Textual</option></select>
  <div className="editor-divider"/>
  <div className="editor-section-heading"><div><b>Preparação da mensagem</b><span>Preencha os campos no seu ritmo. Você decide o conteúdo.</span></div></div>
  <label>Texto bíblico base</label><textarea className="structured-textarea compact" placeholder="Ex.: João 15:1-8" value={draft.baseText} onChange={e=>setDraft(d=>({...d,baseText:e.target.value}))}/>
