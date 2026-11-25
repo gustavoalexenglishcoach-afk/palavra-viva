@@ -3,7 +3,15 @@ export default async function handler(req: any, res: any) {
   if (!key) return res.status(503).json({ error: 'A Bíblia ainda não foi conectada. Configure a chave da API.Bible na Vercel.' });
   const { action, bibleId, bookId, chapterId } = req.query || {};
   let path = '';
-  if (action === 'bibles') path = '/bibles';
+  if (action === 'bibles') {
+    // Request the exact three Portuguese Bible editions selected in the API.Bible plan.
+    const selectedBibleIds = [
+      '78a9f6124f344018-01', // NVI
+      'd6e14a625393b4da-01', // NTV
+      'afc24de218ef6e38-01', // ARA
+    ];
+    path = '/bibles?ids=' + encodeURIComponent(selectedBibleIds.join(','));
+  }
   else if (action === 'books' && bibleId) path = `/bibles/${encodeURIComponent(bibleId)}/books`;
   else if (action === 'chapters' && bibleId && bookId) path = `/bibles/${encodeURIComponent(bibleId)}/books/${encodeURIComponent(bookId)}/chapters`;
   else if (action === 'verses' && bibleId && chapterId) path = `/bibles/${encodeURIComponent(bibleId)}/chapters/${encodeURIComponent(chapterId)}?content-type=json&include-verse-numbers=true&include-verse-spans=true`;
@@ -13,7 +21,9 @@ export default async function handler(req: any, res: any) {
     const body = await response.json();
     if (!response.ok) return res.status(response.status).json({ error: body?.message || body?.error || 'Não foi possível consultar a Bíblia.' });
     if (action === 'bibles') {
-      body.data = (body.data || []).filter((b: any) => b.language?.id === 'por');
+      body.data = (body.data || []).filter((b: any) =>
+        ['78a9f6124f344018-01', 'd6e14a625393b4da-01', 'afc24de218ef6e38-01'].includes(b.id)
+      );
     }
     if (action === 'verses') {
       const chapterCopyright = body?.data?.copyright || '';
