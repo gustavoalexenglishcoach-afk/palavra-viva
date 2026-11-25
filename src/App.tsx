@@ -5,6 +5,8 @@ import { supabase } from './lib/supabase';
 import BibleReader from './components/BibleReader';
 
 type Sermon = { id:string; user_id:string; title:string; theme:string; date:string; status:string; content:string; created_at:string };
+type PresentationSlide = { id:string; title:string; body:string };
+type SavedPresentation = { id:string; user_id:string; sermon_id:string|null; title:string; slides:PresentationSlide[]; created_at:string };
 type SermonDraft = { sermonType:string; baseText:string; objective:string; introduction:string; points:string[]; conclusion:string; references:string; notes:string };
 const emptyDraft = ():SermonDraft => ({sermonType:'',baseText:'',objective:'',introduction:'',points:['','',''],conclusion:'',references:'',notes:''});
 const readDraft = (raw:string):SermonDraft => {
@@ -44,6 +46,14 @@ export default function App(){
  const [saving,setSaving]=useState(false);
  const [viewMode,setViewMode]=useState(false);
  const [notice,setNotice]=useState('');
+ const [presentations,setPresentations]=useState<SavedPresentation[]>([]);
+ const [activePresentation,setActivePresentation]=useState<SavedPresentation|null>(null);
+ const [presentationSlides,setPresentationSlides]=useState<PresentationSlide[]>([]);
+ const [presentationTitle,setPresentationTitle]=useState('');
+ const [presentationSermonId,setPresentationSermonId]=useState<string|null>(null);
+ const [presentationBusy,setPresentationBusy]=useState(false);
+ const [presentationMode,setPresentationMode]=useState(false);
+ const [currentSlide,setCurrentSlide]=useState(0);
 
  useEffect(()=>{
   supabase.auth.getSession().then(({data})=>{setSession(data.session);setLoading(false);});
@@ -52,12 +62,23 @@ export default function App(){
  },[]);
 
  useEffect(()=>{
-  if(!session){setSermons([]);return;}
+  if(!session){setSermons([]);setPresentations([]);return;}
   let alive=true;
   supabase.from('sermons').select('*').order('created_at',{ascending:false}).then(({data,error})=>{
    if(!alive)return;
    if(error){setNotice('Não foi possível carregar suas mensagens. Confira se a tabela do banco já foi criada.');return;}
    setSermons((data||[]) as Sermon[]);
+  });
+  return ()=>{alive=false;};
+ },[session]);
+
+ useEffect(()=>{
+  if(!session)return;
+  let alive=true;
+  supabase.from('presentations').select('*').order('created_at',{ascending:false}).then(({data,error})=>{
+   if(!alive)return;
+   if(error){if(error.code!=='42P01')setNotice('Não foi possível carregar as apresentações. Confira a configuração da tabela no Supabase.');return;}
+   setPresentations((data||[]) as SavedPresentation[]);
   });
   return ()=>{alive=false;};
  },[session]);
@@ -78,6 +99,44 @@ export default function App(){
   setSermons(old=>active?old.map(s=>s.id===saved.id?saved:s):[saved,...old]);
   setPage('Mensagens');setActive(null);setNotice('Mensagem salva na nuvem.');
  };
+ const buildSlides=(s:Sermon):PresentationSlide[]=>{
+  const d=readDraft(s.content);
+  const slides:PresentationSlide[]=[{id:crypto.randomUUID(),title:s.title,body:[d.baseText?'Texto bíblico: '+d.baseText:'',d.objective?'Objetivo: '+d.objective:''].filter(Boolean).join('\\n\\n')||s.theme}];
+  if(d.introduction.trim())slides.push({id:crypto.randomUUID(),title:'Introdução',body:d.introduction});
+  d.points.filter(p=>p.trim()).forEach((p,i)=>slides.push({id:crypto.randomUUID(),title:'Ponto '+(i+1),body:p}));
+  if(d.references.trim())slides.push({id:crypto.randomUUID(),title:'Referências bíblicas',body:d.references});
+  if(d.conclusion.trim())slides.push({id:crypto.randomUUID(),title:'Conclusão',body:d.conclusion});
+  return slides;
+ };
+ const startPresentation=(s:Sermon)=>{
+  setActivePresentation(null);setPresentationTitle(s.title);setPresentationSermonId(s.id);
+  setPresentationSlides(buildSlides(s));setCurrentSlide(0);setPresentationMode(false);setNotice('');setPage('EditorApresentacao');
+ };
+ const newBlankPresentation=()=>{
+  setActivePresentation(null);setPresentationTitle('Nova apresentação');setPresentationSermonId(null);
+  setPresentationSlides([{id:crypto.randomUUID(),title:'Título do slide',body:'Digite o conteúdo aqui.'}]);
+  setCurrentSlide(0);setPresentationMode(false);setNotice('');setPage('EditorApresentacao');
+ };
+ const editPresentation=(p:SavedPresentation)=>{
+  setActivePresentation(p);setPresentationTitle(p.title);setPresentationSermonId(p.sermon_id);
+  setPresentationSlides(p.slides||[]);setCurrentSlide(0);setPresentationMode(false);setNotice('');setPage('EditorApresentacao');
+ };
+ const savePresentation=async()=>{
+  if(!session?.user||!presentationTitle.trim()||!presentationSlides.length)return;
+  setPresentationBusy(true);setNotice('');
+  const fields={title:presentationTitle.trim(),sermon_id:presentationSermonId,slides:presentationSlides,user_id:session.user.id};
+  const result=activePresentation
+   ? await supabase.from('presentations').update({title:fields.title,slides:fields.slides,sermon_id:fields.sermon_id}).eq('id',activePresentation.id).select().single()
+   : await supabase.from('presentations').insert(fields).select().single();
+  setPresentationBusy(false);
+  if(result.error){setNotice('Não foi possível salvar. Confira se você criou a tabela presentations no Supabase.');return;}
+  const saved=result.data as SavedPresentation;
+  setPresentations(old=>activePresentation?old.map(p=>p.id===saved.id?saved:p):[saved,...old]);
+  setActivePresentation(saved);setNotice('Apresentação salva na nuvem.');
+ };
+ const updateSlide=(id:string,field:'title'|'body',value:string)=>setPresentationSlides(old=>old.map(slide=>slide.id===id?{...slide,[field]:value}:slide));
+ const addSlide=()=>{const slide={id:crypto.randomUUID(),title:'Novo slide',body:''};setPresentationSlides(old=>[...old,slide]);setCurrentSlide(presentationSlides.length);};
+ const deleteSlide=(id:string)=>{setPresentationSlides(old=>old.filter(s=>s.id!==id));setCurrentSlide(i=>Math.max(0,Math.min(i,presentationSlides.length-2)));};
  const handleAuth=async(e:FormEvent)=>{
   e.preventDefault();setAuthBusy(true);setAuthMessage('');
   const result=authMode==='signup'
@@ -100,7 +159,24 @@ export default function App(){
   </aside>
   {mobile&&<div className="scrim" onClick={()=>setMobile(false)}/>}
   <main className="main"><header className="topbar"><button className="menu-btn" onClick={()=>setMobile(true)}><Menu/></button><div className="crumb">Workspace <ChevronRight size={14}/><b>{page}</b></div><div className="top-actions"><span className="cloud-status"><i/> Sincronizado na nuvem</span><button className="icon-btn"><Bell size={18}/></button><div className="avatar small">G</div></div></header>
-  {notice&&<div style={{margin:'15px auto 0',width:'90%',maxWidth:1080,padding:12,borderRadius:8,background:'#f7f1e5',color:'#84672f',fontSize:12}}>{notice}</div>}
+  {page==='EditorApresentacao'?<section className="content editor-page">
+   <button className="back-link" onClick={()=>{setPresentationMode(false);setPage('Apresentações')}}><ArrowLeft size={16}/> Voltar às apresentações</button>
+   <div className="page-heading"><div><span className="eyebrow">EDITOR DE APRESENTAÇÃO</span><h1>{presentationTitle||'Nova apresentação'}</h1><p>Edite seus slides. O conteúdo continua sendo seu.</p></div><div className="editor-actions"><button className="preview-button" onClick={()=>setPresentationMode(v=>!v)}><Monitor size={16}/>{presentationMode?'Voltar ao editor':'Apresentar'}</button><button className="primary" onClick={savePresentation} disabled={presentationBusy}><Save size={17}/>{presentationBusy?'Salvando...':'Salvar apresentação'}</button></div></div>
+   {!presentationMode?<div className="editor-card" style={{maxWidth:900}}>
+    <label>Nome da apresentação</label><input className="title-input" value={presentationTitle} onChange={e=>setPresentationTitle(e.target.value)}/>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,margin:'24px 0 14px'}}><div><b>Slides ({presentationSlides.length})</b><div style={{fontSize:12,color:'#8793a0'}}>Clique em um slide para editar o conteúdo.</div></div><button type="button" className="add-point" onClick={addSlide}><Plus size={15}/> Adicionar slide</button></div>
+    {presentationSlides.map((slide,index)=><div key={slide.id} style={{border:'1px solid #e4e9ee',borderRadius:12,padding:18,marginBottom:14,background:'#fff'}}>
+     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}><b style={{color:'#31516d'}}>Slide {index+1}</b><button type="button" className="remove-point" title="Excluir slide" disabled={presentationSlides.length===1} onClick={()=>deleteSlide(slide.id)}><X size={15}/></button></div>
+     <label>Título</label><input className="title-input" value={slide.title} onChange={e=>updateSlide(slide.id,'title',e.target.value)}/>
+     <label>Conteúdo</label><textarea className="structured-textarea" rows={4} value={slide.body} onChange={e=>updateSlide(slide.id,'body',e.target.value)} placeholder="Escreva o conteúdo deste slide..."/>
+    </div>)}
+    <div className="editor-foot">Dica: use pouco texto por slide para facilitar a leitura no telão. Você pode editar tudo antes de apresentar.</div>
+   </div>:<div style={{background:'#101d2b',borderRadius:16,padding:24,color:'#fff',minHeight:'65vh',display:'flex',flexDirection:'column',justifyContent:'space-between',alignItems:'center',textAlign:'center'}}>
+    <div style={{fontSize:12,letterSpacing:2,color:'#d8bd7e'}}>PALAVRA VIVA • APRESENTAÇÃO</div>
+    <div style={{width:'100%',maxWidth:1050,margin:'auto',padding:'7vh 2vw'}}><div style={{fontSize:'clamp(30px,5vw,64px)',fontWeight:800,lineHeight:1.15,whiteSpace:'pre-wrap'}}>{presentationSlides[currentSlide]?.title}</div><div style={{fontSize:'clamp(20px,2.6vw,34px)',lineHeight:1.55,marginTop:34,whiteSpace:'pre-wrap',color:'#e8edf2'}}>{presentationSlides[currentSlide]?.body}</div></div>
+    <div style={{width:'100%',display:'flex',justifyContent:'space-between',alignItems:'center',gap:12}}><button className="preview-button" disabled={currentSlide===0} onClick={()=>setCurrentSlide(i=>Math.max(0,i-1))}>Anterior</button><span style={{fontSize:13,color:'#b9c6d3'}}>Slide {currentSlide+1} de {presentationSlides.length}</span><button className="preview-button" disabled={currentSlide>=presentationSlides.length-1} onClick={()=>setCurrentSlide(i=>Math.min(presentationSlides.length-1,i+1))}>Próximo</button></div>
+   </div>}
+  </section>:  {notice&&<div style={{margin:'15px auto 0',width:'90%',maxWidth:1080,padding:12,borderRadius:8,background:'#f7f1e5',color:'#84672f',fontSize:12}}>{notice}</div>}
   {page==='Editor'?<section className="content editor-page"><button className="back-link" onClick={()=>setPage('Mensagens')}><ArrowLeft size={16}/> Voltar às mensagens</button><div className="page-heading"><div><span className="eyebrow">EDITOR DE MENSAGEM</span><h1>{active?'Editar mensagem':'Nova mensagem'}</h1><p>Organize suas anotações e prepare sua próxima mensagem.</p></div><div className="editor-actions"><button type="button" className="preview-button" onClick={()=>setViewMode(v=>!v)}><BookOpen size={16}/> {viewMode?'Voltar ao editor':'Visualizar mensagem'}</button>{!viewMode&&<button className="primary" onClick={save} disabled={saving}><Save size={17}/> {saving?'Salvando...':'Salvar mensagem'}</button>}</div></div>{viewMode?<article className="reading-card"><div className="reading-topline">VISUALIZAÇÃO DA MENSAGEM</div><h2>{title.trim()||'Mensagem sem título'}</h2><div className="reading-meta">{theme||'Sem categoria'}{draft.sermonType&&<><span>•</span>{draft.sermonType}</>}</div>{draft.baseText&&<section className="reading-section reading-scripture"><h3>Texto bíblico base</h3><p>{draft.baseText}</p></section>}{draft.objective&&<section className="reading-section"><h3>Objetivo da mensagem</h3><p>{draft.objective}</p></section>}{draft.introduction&&<section className="reading-section"><h3>Introdução</h3><p>{draft.introduction}</p></section>}{draft.points.some(p=>p.trim())&&<section className="reading-section"><h3>Desenvolvimento</h3><ol className="reading-points">{draft.points.map((point,index)=>point.trim()&&<li key={index}><p>{point}</p></li>)}</ol></section>}{draft.conclusion&&<section className="reading-section"><h3>Conclusão</h3><p>{draft.conclusion}</p></section>}{draft.references&&<section className="reading-section"><h3>Referências bíblicas complementares</h3><p>{draft.references}</p></section>}{draft.notes&&<section className="reading-section reading-notes"><h3>Anotações pessoais</h3><p>{draft.notes}</p></section>}{!draft.baseText&&!draft.objective&&!draft.introduction&&!draft.points.some(p=>p.trim())&&!draft.conclusion&&!draft.references&&!draft.notes&&<p className="reading-empty">Ainda não há conteúdo registrado nesta mensagem.</p>}</article>:<div className="editor-card">
  <div className="editor-section-heading"><div><b>Identificação</b><span>Comece organizando sua mensagem.</span></div></div>
  <label>Título da mensagem</label><input className="title-input" placeholder="Ex.: A fé que move montanhas" value={title} onChange={e=>setTitle(e.target.value)}/>
@@ -123,6 +199,13 @@ export default function App(){
    <div className="section-title"><div><h2>Visão geral</h2><p>Acompanhe seu material de estudo.</p></div></div><div className="stats"><div className="stat-card"><div className="stat-icon blue"><NotebookPen/></div><span>Mensagens salvas</span><strong>{sermons.length.toString().padStart(2,'0')}</strong><small>Na sua biblioteca</small></div><div className="stat-card"><div className="stat-icon gold"><BookMarked/></div><span>Temas estudados</span><strong>{new Set(sermons.map(s=>s.theme)).size.toString().padStart(2,'0')}</strong><small>Assuntos organizados</small></div><div className="stat-card"><div className="stat-icon green"><Presentation/></div><span>Apresentações</span><strong>00</strong><small>Prontas para projetar</small></div></div>
    <div className="section-title recent-title"><div><h2>Mensagens recentes</h2><p>Continue de onde você parou.</p></div><button className="text-button" onClick={()=>setPage('Mensagens')}>Ver todas <ChevronRight size={16}/></button></div><div className="sermon-list">{sermons.slice(0,3).map(s=><button className="sermon-row" key={s.id} onClick={()=>edit(s)}><div className="sermon-symbol"><BookOpen/></div><div className="sermon-info"><b>{s.title}</b><span>{s.theme} <i>•</i> {s.date}</span></div><span className={'pill '+(s.status==='Concluída'?'done':'draft')}>{s.status}</span><ChevronRight className="row-arrow" size={18}/></button>)}{!sermons.length&&<div className="empty">Suas mensagens salvas aparecerão aqui.</div>}</div>
   </section>:page==='Mensagens'?<section className="content"><div className="page-heading"><div><span className="eyebrow">SUA BIBLIOTECA</span><h1>Minhas mensagens</h1><p>Suas pregações e estudos, organizados em um só lugar.</p></div><button className="primary" onClick={create}><Plus size={18}/> Nova mensagem</button></div><div className="search-box"><Search size={18}/><input placeholder="Buscar por título ou tema..." value={query} onChange={e=>setQuery(e.target.value)}/></div><div className="sermon-list full-list">{filtered.map(s=><button className="sermon-row" key={s.id} onClick={()=>edit(s)}><div className="sermon-symbol"><BookOpen/></div><div className="sermon-info"><b>{s.title}</b><span>{s.theme} <i>•</i> {s.date}</span></div><span className={'pill '+(s.status==='Concluída'?'done':'draft')}>{s.status}</span><ChevronRight className="row-arrow" size={18}/></button>)}{!filtered.length&&<div className="empty">Nenhuma mensagem encontrada.</div>}</div></section>
-  :page==='Bíblia'?<BibleReader/>:<section className="content"><div className="page-heading"><div><span className="eyebrow">PALAVRA VIVA</span><h1>{page}</h1><p>{page==='Apresentações'?'Crie e organize apresentações a partir das suas mensagens.':'Organize suas mensagens por pastas e temas.'}</p></div></div><div className="coming-card"><div className="coming-icon">{page==='Apresentações'?<Presentation/>:<FolderOpen/>}</div><h2>{page==='Apresentações'?'Suas apresentações começam aqui':'Tudo organizado no seu ritmo'}</h2><p>Estamos preparando esta área para uma próxima etapa do Palavra Viva.</p><span className="pill draft">Em desenvolvimento</span></div></section>}
+  :page==='Bíblia'?<BibleReader/>:page==='Apresentações'?<section className="content">
+   <div className="page-heading"><div><span className="eyebrow">SEUS SLIDES</span><h1>Apresentações</h1><p>Transforme suas mensagens em slides e apresente no telão.</p></div><button className="primary" onClick={newBlankPresentation}><Plus size={18}/> Nova apresentação</button></div>
+   <div className="editor-card" style={{marginBottom:22}}><b>Comece por uma mensagem</b><p style={{fontSize:13,color:'#8793a0',marginTop:6}}>Escolha uma mensagem salva para organizar automaticamente os primeiros slides. Você poderá editar tudo.</p>
+    {sermons.length?sermons.map(s=><div key={s.id} className="sermon-row" style={{cursor:'default'}}><div className="sermon-symbol"><BookOpen/></div><div className="sermon-info"><b>{s.title}</b><span>{s.theme} • {s.date}</span></div><button className="preview-button" onClick={()=>startPresentation(s)}>Criar slides</button></div>):<div className="empty">Salve uma mensagem primeiro para criar slides a partir dela.</div>}
+   </div>
+   <div className="section-title"><div><h2>Minhas apresentações</h2><p>Seus slides salvos na nuvem.</p></div></div>
+   <div className="sermon-list full-list">{presentations.map(p=><button className="sermon-row" key={p.id} onClick={()=>editPresentation(p)}><div className="sermon-symbol"><Presentation/></div><div className="sermon-info"><b>{p.title}</b><span>{p.slides?.length||0} slides • {new Date(p.created_at).toLocaleDateString('pt-BR')}</span></div><span className="pill done">Salva</span><ChevronRight className="row-arrow" size={18}/></button>)}{!presentations.length&&<div className="empty">Suas apresentações salvas aparecerão aqui.</div>}</div>
+  </section>:<section className="content"><div className="page-heading"><div><span className="eyebrow">PALAVRA VIVA</span><h1>{page}</h1><p>Organize suas mensagens por pastas e temas.</p></div></div><div className="coming-card"><div className="coming-icon"><FolderOpen/></div><h2>Tudo organizado no seu ritmo</h2><p>Estamos preparando esta área para uma próxima etapa do Palavra Viva.</p><span className="pill draft">Em desenvolvimento</span></div></section>}
   <footer>Palavra Viva <span>•</span> Seu espaço de preparação e estudo bíblico.</footer></main></div>;
 }
