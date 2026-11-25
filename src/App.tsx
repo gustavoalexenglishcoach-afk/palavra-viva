@@ -7,6 +7,18 @@ import BibleReader from './components/BibleReader';
 type Sermon = { id:string; user_id:string; title:string; theme:string; date:string; status:string; content:string; created_at:string };
 type PresentationSlide = { id:string; title:string; body:string; background?:string; visualStyle?:string };
 type SavedPresentation = { id:string; user_id:string; sermon_id:string|null; title:string; slides:PresentationSlide[]; created_at:string };
+const normalizePresentationSlides=(raw:unknown):PresentationSlide[]=>{
+ let value=raw;
+ if(typeof value==='string'){try{value=JSON.parse(value);}catch{return [];}}
+ if(!Array.isArray(value))return [];
+ return value.filter((slide):slide is Record<string,unknown>=>Boolean(slide&&typeof slide==='object')).map((slide,index)=>({
+  id:typeof slide.id==='string'&&slide.id?slide.id:`slide-${index+1}`,
+  title:typeof slide.title==='string'?slide.title:'',
+  body:typeof slide.body==='string'?slide.body:'',
+  ...(typeof slide.background==='string'?{background:slide.background}:{}),
+  ...(typeof slide.visualStyle==='string'?{visualStyle:slide.visualStyle}:{})
+ }));
+};
 type SermonDraft = { sermonType:string; baseText:string; objective:string; introduction:string; points:string[]; conclusion:string; references:string; notes:string };
 const emptyDraft = ():SermonDraft => ({sermonType:'',baseText:'',objective:'',introduction:'',points:['','',''],conclusion:'',references:'',notes:''});
 const readDraft = (raw:string):SermonDraft => {
@@ -140,8 +152,14 @@ export default function App(){
   setCurrentSlide(0);setPresentationMode(false);setNotice('');setPage('EditorApresentacao');
  };
  const editPresentation=(p:SavedPresentation)=>{
-  setActivePresentation(p);setPresentationTitle(p.title);setPresentationSermonId(p.sermon_id);
-  setPresentationSlides(p.slides||[]);setVisualStyle(p.slides?.[0]?.visualStyle||'cinematic');setCurrentSlide(0);setPresentationMode(false);setNotice('');setPage('EditorApresentacao');
+  const slides=normalizePresentationSlides(p.slides);
+  setActivePresentation({...p,slides});setPresentationTitle(p.title);setPresentationSermonId(p.sermon_id);
+  setPresentationSlides(slides);setVisualStyle(slides[0]?.visualStyle||'cinematic');setCurrentSlide(0);setPresentationMode(false);setNotice('');setPage('EditorApresentacao');
+ };
+ const beginPresentation=()=>{
+  const slides=presentationSlides.length?normalizePresentationSlides(presentationSlides):normalizePresentationSlides(activePresentation?.slides);
+  if(!slides.length){setNotice('Esta apresentação ainda não tem slides para exibir.');return;}
+  setPresentationSlides(slides);setCurrentSlide(0);setPresentationMode(true);
  };
  const savePresentation=async()=>{
   if(!session?.user||!presentationTitle.trim()||!presentationSlides.length)return;
@@ -184,7 +202,7 @@ export default function App(){
   {notice&&<div style={{margin:'15px auto 0',width:'90%',maxWidth:1080,padding:12,borderRadius:8,background:'#f7f1e5',color:'#84672f',fontSize:12}}>{notice}</div>}
   {page==='EditorApresentacao'?<section className="content editor-page">
    <button className="back-link" onClick={()=>{setPresentationMode(false);setPage('Apresentações')}}><ArrowLeft size={16}/> Voltar às apresentações</button>
-   <div className="page-heading"><div><span className="eyebrow">EDITOR DE APRESENTAÇÃO</span><h1>{presentationTitle||'Nova apresentação'}</h1><p>Edite seus slides. O conteúdo continua sendo seu.</p></div><div className="editor-actions"><button className="preview-button" onClick={()=>setPresentationMode(v=>!v)}><Monitor size={16}/>{presentationMode?'Voltar ao editor':'Apresentar'}</button><button className="primary" onClick={savePresentation} disabled={presentationBusy}><Save size={17}/>{presentationBusy?'Salvando...':'Salvar apresentação'}</button></div></div>
+   <div className="page-heading"><div><span className="eyebrow">EDITOR DE APRESENTAÇÃO</span><h1>{presentationTitle||'Nova apresentação'}</h1><p>Edite seus slides. O conteúdo continua sendo seu.</p></div><div className="editor-actions"><button className="preview-button" onClick={()=>presentationMode?setPresentationMode(false):beginPresentation()}><Monitor size={16}/>{presentationMode?'Voltar ao editor':'Apresentar'}</button><button className="primary" onClick={savePresentation} disabled={presentationBusy}><Save size={17}/>{presentationBusy?'Salvando...':'Salvar apresentação'}</button></div></div>
    {!presentationMode?<div className="editor-card" style={{maxWidth:900}}>
     <label>Nome da apresentação</label><input className="title-input" value={presentationTitle} onChange={e=>setPresentationTitle(e.target.value)}/>
     <label>Modelo visual</label><select className="title-input" value={visualStyle} onChange={e=>changeVisualStyle(e.target.value)}><option value="cinematic">Cinematográfico — imagem e contraste</option><option value="minimal">Minimalista — elegante e limpo</option><option value="warm">Acolhedor — tons dourados</option></select>
