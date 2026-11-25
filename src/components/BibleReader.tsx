@@ -6,13 +6,41 @@ type BookItem = { id: string; name: string; nameLong?: string; abbreviation?: st
 type ChapterItem = { id: string; number: string; reference?: string; };
 type VerseItem = { id: string; reference?: string; number?: string; text?: string; };
 
+const normalizeBibleText = (value?: string) =>
+  (value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().trim();
+
 const translationCode = (b: BibleItem) => {
-  const raw = [b.abbreviationLocal, b.abbreviation, b.nameLocal, b.name].filter(Boolean).join(' ').toUpperCase();
-  if (raw.includes('ALMEIDA REVISTA E ATUALIZADA') || raw.includes('ARA')) return 'ARA';
-  if (raw.includes('ALMEIDA CORRIGIDA FIEL') || raw.includes('ACF')) return 'ACF';
-  if (raw.includes('NOVA VERSÃO INTERNACIONAL') || raw.includes('NOVA VERSAO INTERNACIONAL') || raw.includes('NVI')) return 'NVI';
-  if (raw.includes('ALMEIDA REVISTA E CORRIGIDA') || raw.includes('ARC')) return 'ARC';
+  const abbreviations = [b.abbreviationLocal, b.abbreviation].map(normalizeBibleText);
+  const names = [b.nameLocal, b.name].map(normalizeBibleText);
+  // Abreviações precisam ser o código inteiro (ou um token separado).
+  // Isso evita, por exemplo, identificar "PARA" em "Bíblia Livre Para Todos" como ARA.
+  if (abbreviations.some(value => value === 'ARA' || /\\bARA\\b/.test(value)) ||
+      names.some(value => value.includes('ALMEIDA REVISTA E ATUALIZADA'))) return 'ARA';
+  if (abbreviations.some(value => value === 'ACF' || /\\bACF\\b/.test(value)) ||
+      names.some(value => value.includes('ALMEIDA CORRIGIDA FIEL'))) return 'ACF';
+  if (abbreviations.some(value => value === 'NVI' || /\\bNVI\\b/.test(value)) ||
+      names.some(value => value.includes('NOVA VERSAO INTERNACIONAL'))) return 'NVI';
+  if (abbreviations.some(value => value === 'ARC' || /\\bARC\\b/.test(value)) ||
+      names.some(value => value.includes('ALMEIDA REVISTA E CORRIGIDA'))) return 'ARC';
   return '';
+};
+
+const translationMatchScore = (b: BibleItem, code: string) => {
+  const localAbbreviation = normalizeBibleText(b.abbreviationLocal);
+  const abbreviation = normalizeBibleText(b.abbreviation);
+  const localName = normalizeBibleText(b.nameLocal);
+  const name = normalizeBibleText(b.name);
+  if (localAbbreviation === code) return 4;
+  if (abbreviation === code) return 3;
+  const phrase: Record<string, string> = {
+    ARA: 'ALMEIDA REVISTA E ATUALIZADA',
+    ACF: 'ALMEIDA CORRIGIDA FIEL',
+    NVI: 'NOVA VERSAO INTERNACIONAL',
+    ARC: 'ALMEIDA REVISTA E CORRIGIDA',
+  };
+  if (localName.includes(phrase[code])) return 2;
+  if (name.includes(phrase[code])) return 1;
+  return 0;
 };
 
 const translationNames: Record<string, string> = {
@@ -40,7 +68,7 @@ export default function BibleReader() {
   const [saved,setSaved]=useState<string[]>(()=>{try{return JSON.parse(localStorage.getItem('pv-bible-favorites')||'[]')}catch{return[]}});
   const [tab,setTab]=useState<'read'|'favorites'>('read');
 
-  useEffect(()=>{let live=true; fetch('/api/bible?action=bibles').then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.error||'Não foi possível carregar as traduções.');return d;}).then(d=>{if(!live)return;const list=(d.data||[]) as BibleItem[];const order=['ARA','ACF','NVI','ARC'];const allowed=list.filter(b=>translationCode(b)).sort((a,b)=>order.indexOf(translationCode(a))-order.indexOf(translationCode(b)));setBibles(allowed);const preferred=allowed.find(b=>translationCode(b)==='ARA')||allowed[0];if(preferred)setBibleId(preferred.id);}).catch(e=>{if(live)setError(e.message);});return()=>{live=false}},[]);
+  useEffect(()=>{let live=true; fetch('/api/bible?action=bibles').then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.error||'Não foi possível carregar as traduções.');return d;}).then(d=>{if(!live)return;const list=(d.data||[]) as BibleItem[];const order=['ARA','ACF','NVI','ARC'];const uniqueByCode=new Map<string,BibleItem>();for(const bible of list){const code=translationCode(bible);if(!code)continue;const current=uniqueByCode.get(code);if(!current||translationMatchScore(bible,code)>translationMatchScore(current,code))uniqueByCode.set(code,bible);}const allowed=order.map(code=>uniqueByCode.get(code)).filter((b):b is BibleItem=>Boolean(b));setBibles(allowed);const preferred=uniqueByCode.get('ARA')||allowed[0];if(preferred)setBibleId(preferred.id);}).catch(e=>{if(live)setError(e.message);});return()=>{live=false}},[]);
   useEffect(()=>{if(!bibleId)return;let live=true;setLoading(true);setError('');setBooks([]);setChapters([]);setVerses([]);fetch('/api/bible?action=books&bibleId='+encodeURIComponent(bibleId)).then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.error);return d;}).then(d=>{if(!live)return;const list=(d.data||[]) as BookItem[];setBooks(list);const first=list[0];if(first)setBookId(first.id);}).catch(e=>{if(live)setError(e.message||'Erro ao carregar livros.');}).finally(()=>{if(live)setLoading(false)});return()=>{live=false}},[bibleId]);
   useEffect(()=>{if(!bibleId||!bookId)return;let live=true;setLoading(true);setChapters([]);setVerses([]);fetch('/api/bible?action=chapters&bibleId='+encodeURIComponent(bibleId)+'&bookId='+encodeURIComponent(bookId)).then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.error);return d;}).then(d=>{if(!live)return;const list=(d.data||[]) as ChapterItem[];setChapters(list);if(list[0])setChapterId(list[0].id);}).catch(e=>{if(live)setError(e.message||'Erro ao carregar capítulos.');}).finally(()=>{if(live)setLoading(false)});return()=>{live=false}},[bibleId,bookId]);
   useEffect(()=>{if(!bibleId||!chapterId)return;let live=true;setLoading(true);setVerses([]);fetch('/api/bible?action=verses&bibleId='+encodeURIComponent(bibleId)+'&chapterId='+encodeURIComponent(chapterId)).then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.error);return d;}).then(d=>{if(!live)return;setVerses((d.data||[]) as VerseItem[]);setCopyright(d.copyright||'');}).catch(e=>{if(live)setError(e.message||'Erro ao carregar versículos.');}).finally(()=>{if(live)setLoading(false)});return()=>{live=false}},[bibleId,chapterId]);
