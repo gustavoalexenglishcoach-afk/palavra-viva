@@ -7,21 +7,27 @@ type ChapterItem = { id: string; number: string; reference?: string; };
 type VerseItem = { id: string; reference?: string; number?: string; text?: string; };
 
 const normalizeBibleText = (value?: string) =>
-  (value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().trim();
+  (value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
 
 const translationCode = (b: BibleItem) => {
   const abbreviations = [b.abbreviationLocal, b.abbreviation].map(normalizeBibleText);
   const names = [b.nameLocal, b.name].map(normalizeBibleText);
-  // Abreviações precisam ser o código inteiro (ou um token separado).
-  // Isso evita, por exemplo, identificar "PARA" em "Bíblia Livre Para Todos" como ARA.
-  if (abbreviations.some(value => value === 'ARA' || /\\bARA\\b/.test(value)) ||
-      names.some(value => value.includes('ALMEIDA REVISTA E ATUALIZADA'))) return 'ARA';
-  if (abbreviations.some(value => value === 'ACF' || /\\bACF\\b/.test(value)) ||
-      names.some(value => value.includes('ALMEIDA CORRIGIDA FIEL'))) return 'ACF';
-  if (abbreviations.some(value => value === 'NVI' || /\\bNVI\\b/.test(value)) ||
-      names.some(value => value.includes('NOVA VERSAO INTERNACIONAL'))) return 'NVI';
-  if (abbreviations.some(value => value === 'ARC' || /\\bARC\\b/.test(value)) ||
-      names.some(value => value.includes('ALMEIDA REVISTA E CORRIGIDA'))) return 'ARC';
+  const hasCode = (code: string) => abbreviations.some(value =>
+    value === code || new RegExp('\\b' + code + '\\b').test(value)
+  );
+
+  if (hasCode('ARA') || names.some(value =>
+    value.includes('ALMEIDA REVISTA E ATUALIZADA')
+  )) return 'ARA';
+  if (hasCode('ACF') || names.some(value =>
+    value.includes('ALMEIDA CORRIGIDA FIEL')
+  )) return 'ACF';
+  if (hasCode('NVI') || names.some(value =>
+    value.includes('NOVA VERSAO INTERNACIONAL')
+  )) return 'NVI';
+  if (hasCode('ARC') || names.some(value =>
+    value.includes('ALMEIDA REVISTA E CORRIGIDA')
+  )) return 'ARC';
   return '';
 };
 
