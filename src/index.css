@@ -46,7 +46,7 @@
 
 /* Apresentação profissional: transições, modelos e tela cheia */
 .presentation-stage{
- width:100%;aspect-ratio:16/9;min-height:520px;max-height:calc(100vh - 210px);
+ width:100%;height:clamp(360px,calc(100vh - 230px),760px);min-height:0;max-height:none;aspect-ratio:auto;
  background-size:cover;background-position:center;border-radius:16px;padding:clamp(18px,3vw,36px);
  color:#fff;display:flex;flex-direction:column;justify-content:space-between;align-items:center;text-align:center;
  box-shadow:0 18px 50px #10223535;overflow:hidden;position:relative;
