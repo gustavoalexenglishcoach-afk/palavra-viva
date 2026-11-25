@@ -13,6 +13,7 @@ export default async function handler(req: any, res: any) {
     const body = await response.json();
     if (!response.ok) return res.status(response.status).json({ error: body?.message || body?.error || 'Não foi possível consultar a Bíblia.' });
     if (action === 'verses') {
+      const chapterCopyright = body?.data?.copyright || '';
       const found = new Map<string, { id: string; reference: string; number: string; text: string }>();
       let currentNumber = '';
       const walk = (node: any): void => {
@@ -30,7 +31,7 @@ export default async function handler(req: any, res: any) {
       };
       walk(body?.data?.content);
       body.data = Array.from(found.values());
-      body.copyright = body?.data?.copyright || body?.copyright || '';
+      body.copyright = chapterCopyright;
     }
     res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
     return res.status(200).json(body);
