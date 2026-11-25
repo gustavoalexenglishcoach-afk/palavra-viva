@@ -9,6 +9,20 @@ type PresentationSlide = { id:string; title:string; body:string; background?:str
 type SavedPresentation = { id:string; user_id:string; sermon_id:string|null; title:string; slides:PresentationSlide[]; created_at:string };
 type SermonDraft = { sermonType:string; baseText:string; objective:string; introduction:string; points:string[]; conclusion:string; references:string; notes:string };
 const emptyDraft = ():SermonDraft => ({sermonType:'',baseText:'',objective:'',introduction:'',points:['','',''],conclusion:'',references:'',notes:''});
+const normalizeSlides = (raw:unknown):PresentationSlide[] => {
+ let value=raw;
+ if(typeof value==='string'){
+  try{value=JSON.parse(value);}catch{return [];}
+ }
+ if(!Array.isArray(value))return [];
+ return value.filter(item=>item&&typeof item==='object').map((item,index)=>({
+  id:typeof item.id==='string'&&item.id?item.id:crypto.randomUUID(),
+  title:typeof item.title==='string'?item.title:typeof item.heading==='string'?item.heading:'Slide '+(index+1),
+  body:typeof item.body==='string'?item.body:typeof item.content==='string'?item.content:'',
+  ...(typeof item.background==='string'?{background:item.background}:{}),
+  ...(typeof item.visualStyle==='string'?{visualStyle:item.visualStyle}:{})
+ }));
+};
 const readDraft = (raw:string):SermonDraft => {
  try {
   const parsed=JSON.parse(raw);
@@ -80,7 +94,7 @@ export default function App(){
   supabase.from('presentations').select('*').order('created_at',{ascending:false}).then(({data,error})=>{
    if(!alive)return;
    if(error){if(error.code!=='42P01')setNotice('Não foi possível carregar as apresentações. Confira a configuração da tabela no Supabase.');return;}
-   setPresentations((data||[]) as SavedPresentation[]);
+   setPresentations(((data||[]) as SavedPresentation[]).map(p=>({...p,slides:normalizeSlides(p.slides)})));
   });
   return ()=>{alive=false;};
  },[session]);
@@ -141,7 +155,7 @@ export default function App(){
  };
  const editPresentation=(p:SavedPresentation)=>{
   setActivePresentation(p);setPresentationTitle(p.title);setPresentationSermonId(p.sermon_id);
-  setPresentationSlides(p.slides||[]);setVisualStyle(p.slides?.[0]?.visualStyle||'cinematic');setCurrentSlide(0);setPresentationMode(false);setNotice('');setPage('EditorApresentacao');
+  const slides=normalizeSlides(p.slides);setPresentationSlides(slides);setVisualStyle(slides[0]?.visualStyle||'cinematic');setCurrentSlide(0);setPresentationMode(false);setNotice('');setPage('EditorApresentacao');
  };
  const savePresentation=async()=>{
   if(!session?.user||!presentationTitle.trim()||!presentationSlides.length)return;
@@ -154,7 +168,7 @@ export default function App(){
   if(result.error){setNotice('Não foi possível salvar. Confira se você criou a tabela presentations no Supabase.');return;}
   const saved=result.data as SavedPresentation;
   setPresentations(old=>activePresentation?old.map(p=>p.id===saved.id?saved:p):[saved,...old]);
-  setActivePresentation(saved);setNotice('Apresentação salva na nuvem.');
+  const normalized={...saved,slides:normalizeSlides(saved.slides)};setActivePresentation(normalized);setPresentationSlides(normalized.slides);setNotice('Apresentação salva na nuvem.');
  };
  const updateSlide=(id:string,field:'title'|'body',value:string)=>setPresentationSlides(old=>old.map(slide=>slide.id===id?{...slide,[field]:value}:slide));
  const addSlide=()=>{const slide={id:crypto.randomUUID(),title:'Novo slide',body:'',visualStyle};setPresentationSlides(old=>[...old,slide]);setCurrentSlide(presentationSlides.length);};
