@@ -4,13 +4,8 @@ export default async function handler(req: any, res: any) {
   const { action, bibleId, bookId, chapterId } = req.query || {};
   let path = '';
   if (action === 'bibles') {
-    // Request the exact three Portuguese Bible editions selected in the API.Bible plan.
-    const selectedBibleIds = [
-      '78a9f6124f344018-01', // NVI
-      'd6e14a625393b4da-01', // NTV
-      'afc24de218ef6e38-01', // ARA
-    ];
-    path = '/bibles?ids=' + encodeURIComponent(selectedBibleIds.join(','));
+    // Load the Portuguese Bible editions available to this API.Bible key.
+    path = '/bibles';
   }
   else if (action === 'books' && bibleId) path = `/bibles/${encodeURIComponent(bibleId)}/books`;
   else if (action === 'chapters' && bibleId && bookId) path = `/bibles/${encodeURIComponent(bibleId)}/books/${encodeURIComponent(bookId)}/chapters`;
@@ -21,9 +16,7 @@ export default async function handler(req: any, res: any) {
     const body = await response.json();
     if (!response.ok) return res.status(response.status).json({ error: body?.message || body?.error || 'Não foi possível consultar a Bíblia.' });
     if (action === 'bibles') {
-      body.data = (body.data || []).filter((b: any) =>
-        ['78a9f6124f344018-01', 'd6e14a625393b4da-01', 'afc24de218ef6e38-01'].includes(b.id)
-      );
+      body.data = (body.data || []).filter((b: any) => b.language?.id === 'por');
     }
     if (action === 'verses') {
       const chapterCopyright = body?.data?.copyright || '';
