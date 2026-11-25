@@ -5,7 +5,7 @@ import { supabase } from './lib/supabase';
 import BibleReader from './components/BibleReader';
 
 type Sermon = { id:string; user_id:string; title:string; theme:string; date:string; status:string; content:string; created_at:string };
-type PresentationSlide = { id:string; title:string; body:string };
+type PresentationSlide = { id:string; title:string; body:string; background?:string; visualStyle?:string };
 type SavedPresentation = { id:string; user_id:string; sermon_id:string|null; title:string; slides:PresentationSlide[]; created_at:string };
 type SermonDraft = { sermonType:string; baseText:string; objective:string; introduction:string; points:string[]; conclusion:string; references:string; notes:string };
 const emptyDraft = ():SermonDraft => ({sermonType:'',baseText:'',objective:'',introduction:'',points:['','',''],conclusion:'',references:'',notes:''});
@@ -54,6 +54,8 @@ export default function App(){
  const [presentationBusy,setPresentationBusy]=useState(false);
  const [presentationMode,setPresentationMode]=useState(false);
  const [currentSlide,setCurrentSlide]=useState(0);
+ const [visualStyle,setVisualStyle]=useState('cinematic');
+ const [presentationFullscreen,setPresentationFullscreen]=useState(false);
 
  useEffect(()=>{
   supabase.auth.getSession().then(({data})=>{setSession(data.session);setLoading(false);});
@@ -108,7 +110,9 @@ export default function App(){
   if(d.conclusion.trim())slides.push({id:crypto.randomUUID(),title:'Conclusão',body:d.conclusion});
   return slides;
  };
+ const backgroundChoices=[{label:'Automática pelo tema',value:'auto'},{label:'Bíblia e luz',value:'https://images.unsplash.com/photo-1504052434569-70ad5836ab65?auto=format&fit=crop&w=1920&q=85'},{label:'Amanhecer',value:'https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?auto=format&fit=crop&w=1920&q=85'},{label:'Montanhas',value:'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1920&q=85'},{label:'Natureza',value:'https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=1920&q=85'},{label:'Cruz e esperança',value:'https://images.unsplash.com/photo-1500534623283-312aade485b7?auto=format&fit=crop&w=1920&q=85'}];
  const getSlideBackground=(slide:PresentationSlide)=>{
+  if(slide.background&&slide.background!=='auto')return slide.background;
   const sourceTheme=sermons.find(s=>s.id===presentationSermonId)?.theme||'';
   const words=(presentationTitle+' '+sourceTheme+' '+slide.title+' '+slide.body).toLocaleLowerCase('pt-BR');
   const backgrounds=[
@@ -121,18 +125,23 @@ export default function App(){
   ];
   return backgrounds.find(item=>item.keys.some(key=>words.includes(key)))?.url||'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1920&q=85';
  };
+ const changeVisualStyle=(style:string)=>{setVisualStyle(style);setPresentationSlides(old=>old.map(slide=>({...slide,visualStyle:style})));};
+ const changeSlideBackground=(id:string,value:string)=>setPresentationSlides(old=>old.map(slide=>slide.id===id?{...slide,background:value}:slide));
+ const toggleFullscreen=async()=>{try{if(!document.fullscreenElement){await document.documentElement.requestFullscreen();setPresentationFullscreen(true);}else{await document.exitFullscreen();setPresentationFullscreen(false);}}catch{setNotice('Não foi possível ativar a tela cheia neste navegador.');}};
+ useEffect(()=>{const onFullscreen=()=>setPresentationFullscreen(Boolean(document.fullscreenElement));document.addEventListener('fullscreenchange',onFullscreen);return()=>document.removeEventListener('fullscreenchange',onFullscreen);},[]);
+ useEffect(()=>{if(!presentationMode)return;const onKey=(event:KeyboardEvent)=>{if(event.key==='ArrowRight'||event.key===' '){event.preventDefault();setCurrentSlide(i=>Math.min(presentationSlides.length-1,i+1));}else if(event.key==='ArrowLeft'){event.preventDefault();setCurrentSlide(i=>Math.max(0,i-1));}else if(event.key==='Escape'&&document.fullscreenElement){document.exitFullscreen();}};window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey);},[presentationMode,presentationSlides.length]);
  const startPresentation=(s:Sermon)=>{
   setActivePresentation(null);setPresentationTitle(s.title);setPresentationSermonId(s.id);
-  setPresentationSlides(buildSlides(s));setCurrentSlide(0);setPresentationMode(false);setNotice('');setPage('EditorApresentacao');
+  setPresentationSlides(buildSlides(s).map(slide=>({...slide,visualStyle:'cinematic'})));setVisualStyle('cinematic');setCurrentSlide(0);setPresentationMode(false);setNotice('');setPage('EditorApresentacao');
  };
  const newBlankPresentation=()=>{
   setActivePresentation(null);setPresentationTitle('Nova apresentação');setPresentationSermonId(null);
-  setPresentationSlides([{id:crypto.randomUUID(),title:'Título do slide',body:'Digite o conteúdo aqui.'}]);
+  setPresentationSlides([{id:crypto.randomUUID(),title:'Título do slide',body:'Digite o conteúdo aqui.',visualStyle:'cinematic'}]);setVisualStyle('cinematic');
   setCurrentSlide(0);setPresentationMode(false);setNotice('');setPage('EditorApresentacao');
  };
  const editPresentation=(p:SavedPresentation)=>{
   setActivePresentation(p);setPresentationTitle(p.title);setPresentationSermonId(p.sermon_id);
-  setPresentationSlides(p.slides||[]);setCurrentSlide(0);setPresentationMode(false);setNotice('');setPage('EditorApresentacao');
+  setPresentationSlides(p.slides||[]);setVisualStyle(p.slides?.[0]?.visualStyle||'cinematic');setCurrentSlide(0);setPresentationMode(false);setNotice('');setPage('EditorApresentacao');
  };
  const savePresentation=async()=>{
   if(!session?.user||!presentationTitle.trim()||!presentationSlides.length)return;
@@ -148,7 +157,7 @@ export default function App(){
   setActivePresentation(saved);setNotice('Apresentação salva na nuvem.');
  };
  const updateSlide=(id:string,field:'title'|'body',value:string)=>setPresentationSlides(old=>old.map(slide=>slide.id===id?{...slide,[field]:value}:slide));
- const addSlide=()=>{const slide={id:crypto.randomUUID(),title:'Novo slide',body:''};setPresentationSlides(old=>[...old,slide]);setCurrentSlide(presentationSlides.length);};
+ const addSlide=()=>{const slide={id:crypto.randomUUID(),title:'Novo slide',body:'',visualStyle};setPresentationSlides(old=>[...old,slide]);setCurrentSlide(presentationSlides.length);};
  const deleteSlide=(id:string)=>{setPresentationSlides(old=>old.filter(s=>s.id!==id));setCurrentSlide(i=>Math.max(0,Math.min(i,presentationSlides.length-2)));};
  const handleAuth=async(e:FormEvent)=>{
   e.preventDefault();setAuthBusy(true);setAuthMessage('');
@@ -178,17 +187,19 @@ export default function App(){
    <div className="page-heading"><div><span className="eyebrow">EDITOR DE APRESENTAÇÃO</span><h1>{presentationTitle||'Nova apresentação'}</h1><p>Edite seus slides. O conteúdo continua sendo seu.</p></div><div className="editor-actions"><button className="preview-button" onClick={()=>setPresentationMode(v=>!v)}><Monitor size={16}/>{presentationMode?'Voltar ao editor':'Apresentar'}</button><button className="primary" onClick={savePresentation} disabled={presentationBusy}><Save size={17}/>{presentationBusy?'Salvando...':'Salvar apresentação'}</button></div></div>
    {!presentationMode?<div className="editor-card" style={{maxWidth:900}}>
     <label>Nome da apresentação</label><input className="title-input" value={presentationTitle} onChange={e=>setPresentationTitle(e.target.value)}/>
+    <label>Modelo visual</label><select className="title-input" value={visualStyle} onChange={e=>changeVisualStyle(e.target.value)}><option value="cinematic">Cinematográfico — imagem e contraste</option><option value="minimal">Minimalista — elegante e limpo</option><option value="warm">Acolhedor — tons dourados</option></select>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,margin:'24px 0 14px'}}><div><b>Slides ({presentationSlides.length})</b><div style={{fontSize:12,color:'#8793a0'}}>Clique em um slide para editar o conteúdo.</div></div><button type="button" className="add-point" onClick={addSlide}><Plus size={15}/> Adicionar slide</button></div>
     {presentationSlides.map((slide,index)=><div key={slide.id} style={{border:'1px solid #e4e9ee',borderRadius:12,padding:18,marginBottom:14,background:'#fff'}}>
      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}><b style={{color:'#31516d'}}>Slide {index+1}</b><button type="button" className="remove-point" title="Excluir slide" disabled={presentationSlides.length===1} onClick={()=>deleteSlide(slide.id)}><X size={15}/></button></div>
      <label>Título</label><input className="title-input" value={slide.title} onChange={e=>updateSlide(slide.id,'title',e.target.value)}/>
      <label>Conteúdo</label><textarea className="structured-textarea" rows={4} value={slide.body} onChange={e=>updateSlide(slide.id,'body',e.target.value)} placeholder="Escreva o conteúdo deste slide..."/>
+      <label>Imagem de fundo deste slide</label><select className="title-input" value={slide.background||'auto'} onChange={e=>changeSlideBackground(slide.id,e.target.value)}>{backgroundChoices.map(choice=><option key={choice.value} value={choice.value}>{choice.label}</option>)}</select>
     </div>)}
     <div className="editor-foot">Dica: use pouco texto por slide para facilitar a leitura no telão. Você pode editar tudo antes de apresentar.</div>
-   </div>:<div style={{backgroundImage:`linear-gradient(90deg,rgba(8,19,31,.82),rgba(8,19,31,.48)),url("${getSlideBackground(presentationSlides[currentSlide]||{id:'',title:'',body:''})}")`,backgroundSize:'cover',backgroundPosition:'center',borderRadius:16,padding:24,color:'#fff',minHeight:'65vh',display:'flex',flexDirection:'column',justifyContent:'space-between',alignItems:'center',textAlign:'center',boxShadow:'0 18px 50px #10223535'}}>
-    <div style={{fontSize:12,letterSpacing:2,color:'#f0d69c',fontWeight:700}}>PALAVRA VIVA • APRESENTAÇÃO</div>
-    <div style={{width:'100%',maxWidth:1050,margin:'auto',padding:'7vh 2vw',textShadow:'0 3px 18px #0009'}}><div style={{fontSize:'clamp(30px,5vw,64px)',fontWeight:800,lineHeight:1.15,whiteSpace:'pre-wrap'}}>{presentationSlides[currentSlide]?.title}</div><div style={{fontSize:'clamp(20px,2.6vw,34px)',lineHeight:1.55,marginTop:34,whiteSpace:'pre-wrap',color:'#f4f6f8'}}>{presentationSlides[currentSlide]?.body}</div></div>
-    <div style={{width:'100%',display:'flex',justifyContent:'space-between',alignItems:'center',gap:12}}><button className="preview-button" disabled={currentSlide===0} onClick={()=>setCurrentSlide(i=>Math.max(0,i-1))}>Anterior</button><span style={{fontSize:13,color:'#f1f3f5'}}>Slide {currentSlide+1} de {presentationSlides.length}</span><button className="preview-button" disabled={currentSlide>=presentationSlides.length-1} onClick={()=>setCurrentSlide(i=>Math.min(presentationSlides.length-1,i+1))}>Próximo</button></div>
+   </div>:<div className={`presentation-stage style-${presentationSlides[currentSlide]?.visualStyle||visualStyle}`} style={{backgroundImage:`linear-gradient(90deg,rgba(8,19,31,.78),rgba(8,19,31,.42)),url("${getSlideBackground(presentationSlides[currentSlide]||{id:'',title:'',body:''})}")`}}>
+    <div className="presentation-brand">PALAVRA VIVA • APRESENTAÇÃO</div>
+    <div key={currentSlide} className="presentation-copy"><div className="presentation-title">{presentationSlides[currentSlide]?.title}</div><div className="presentation-body">{presentationSlides[currentSlide]?.body}</div></div>
+    <div className="presentation-controls"><button className="presentation-control" disabled={currentSlide===0} onClick={()=>setCurrentSlide(i=>Math.max(0,i-1))}>Anterior</button><span>Slide {currentSlide+1} de {presentationSlides.length}</span><div className="presentation-control-actions"><button className="presentation-control" onClick={toggleFullscreen}>{presentationFullscreen?'Sair da tela cheia':'Tela cheia'}</button><button className="presentation-control" onClick={()=>setPresentationMode(false)}>Fechar</button><button className="presentation-control" disabled={currentSlide>=presentationSlides.length-1} onClick={()=>setCurrentSlide(i=>Math.min(presentationSlides.length-1,i+1))}>Próximo</button></div></div>
    </div>}
   </section>:page==='Editor'?<section className="content editor-page"><button className="back-link" onClick={()=>setPage('Mensagens')}><ArrowLeft size={16}/> Voltar às mensagens</button><div className="page-heading"><div><span className="eyebrow">EDITOR DE MENSAGEM</span><h1>{active?'Editar mensagem':'Nova mensagem'}</h1><p>Organize suas anotações e prepare sua próxima mensagem.</p></div><div className="editor-actions"><button type="button" className="preview-button" onClick={()=>setViewMode(v=>!v)}><BookOpen size={16}/> {viewMode?'Voltar ao editor':'Visualizar mensagem'}</button>{!viewMode&&<button className="primary" onClick={save} disabled={saving}><Save size={17}/> {saving?'Salvando...':'Salvar mensagem'}</button>}</div></div>{viewMode?<article className="reading-card"><div className="reading-topline">VISUALIZAÇÃO DA MENSAGEM</div><h2>{title.trim()||'Mensagem sem título'}</h2><div className="reading-meta">{theme||'Sem categoria'}{draft.sermonType&&<><span>•</span>{draft.sermonType}</>}</div>{draft.baseText&&<section className="reading-section reading-scripture"><h3>Texto bíblico base</h3><p>{draft.baseText}</p></section>}{draft.objective&&<section className="reading-section"><h3>Objetivo da mensagem</h3><p>{draft.objective}</p></section>}{draft.introduction&&<section className="reading-section"><h3>Introdução</h3><p>{draft.introduction}</p></section>}{draft.points.some(p=>p.trim())&&<section className="reading-section"><h3>Desenvolvimento</h3><ol className="reading-points">{draft.points.map((point,index)=>point.trim()&&<li key={index}><p>{point}</p></li>)}</ol></section>}{draft.conclusion&&<section className="reading-section"><h3>Conclusão</h3><p>{draft.conclusion}</p></section>}{draft.references&&<section className="reading-section"><h3>Referências bíblicas complementares</h3><p>{draft.references}</p></section>}{draft.notes&&<section className="reading-section reading-notes"><h3>Anotações pessoais</h3><p>{draft.notes}</p></section>}{!draft.baseText&&!draft.objective&&!draft.introduction&&!draft.points.some(p=>p.trim())&&!draft.conclusion&&!draft.references&&!draft.notes&&<p className="reading-empty">Ainda não há conteúdo registrado nesta mensagem.</p>}</article>:<div className="editor-card">
  <div className="editor-section-heading"><div><b>Identificação</b><span>Comece organizando sua mensagem.</span></div></div>
