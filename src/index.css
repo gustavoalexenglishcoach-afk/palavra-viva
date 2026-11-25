@@ -42,3 +42,40 @@
 /* Bíblia */
 .bible-reader{width:min(1080px,90%);margin:35px auto 55px;flex:1}.bible-intro{display:flex;align-items:center;gap:17px;margin-bottom:25px}.bible-book-icon{width:52px;height:52px;border-radius:14px;background:#f5efdf;color:#a98542;display:grid;place-items:center}.bible-intro h2{font:800 23px Manrope;color:#1b2a3b;margin:5px 0}.bible-intro p{font-size:12px;color:#8793a0;margin:0}.bible-alert{display:flex;gap:12px;padding:15px;background:#fff8eb;border:1px solid #efdfbd;border-radius:10px;color:#946f30;margin-bottom:17px}.bible-alert>div{display:grid;gap:4px}.bible-alert b{font-size:12px}.bible-alert span,.bible-alert small{font-size:11px;line-height:1.5}.bible-toolbar{display:grid;grid-template-columns:1.3fr 1fr .55fr;gap:12px;background:#fff;border:1px solid #e9edf1;padding:16px;border-radius:12px}.bible-version{display:grid;gap:7px}.bible-version label{font-size:9px;letter-spacing:1px;font-weight:700;color:#8c98a5}.bible-version select{width:100%;min-width:0;border:1px solid #e4e9ee;border-radius:7px;background:#fff;padding:11px;color:#344357;font-size:12px}.bible-tabs{display:flex;gap:8px;margin:19px 0 0;border-bottom:1px solid #e5e9ed}.bible-tabs button{display:flex;align-items:center;gap:7px;padding:11px 14px;border:0;background:none;color:#83909e;font-size:11px;border-bottom:2px solid transparent}.bible-tabs button.active{color:#244967;border-color:#c5a15d;font-weight:700}.bible-tabs span{background:#edf1f4;border-radius:20px;padding:2px 6px;font-size:9px}.bible-reading-head{display:flex;justify-content:space-between;align-items:center;padding:23px 3px 14px}.bible-reading-head h3{font:800 23px Manrope;color:#26384c;margin:5px 0}.chapter-arrows{display:flex;gap:7px}.chapter-arrows button{width:34px;height:34px;border:1px solid #e4e9ed;background:#fff;color:#496780;border-radius:8px;display:grid;place-items:center}.chapter-arrows button:disabled{opacity:.35;cursor:not-allowed}.bible-verses{background:#fff;border:1px solid #e9edf1;border-radius:12px;padding:15px 18px}.bible-verse{display:flex;align-items:flex-start;gap:13px;padding:11px 4px;border-bottom:1px solid #f1f3f5;border-radius:6px}.bible-verse:last-child{border-bottom:0}.bible-verse.marked{background:#fbf6e9}.verse-number{border:0;background:#eef2f5;color:#55728c;border-radius:6px;min-width:27px;height:25px;font-size:10px;font-weight:700}.bible-verse p{font:16px/1.75 Georgia,serif;color:#354357;margin:0;flex:1}.verse-favorite{border:0;background:transparent;color:#aab4be;padding:4px}.verse-favorite.saved{color:#b18b47}.verse-favorite.saved svg{fill:#f3e6c9}.bible-loading,.bible-empty{padding:35px;text-align:center;color:#8995a1;font-size:12px;display:flex;justify-content:center;align-items:center;gap:9px}.spin{animation:bible-spin 1s linear infinite}@keyframes bible-spin{to{transform:rotate(360deg)}}.bible-favorites{background:#fff;border:1px solid #e9edf1;border-radius:12px;padding:23px;color:#7e8b98;min-height:130px}.bible-favorites h3{display:flex;align-items:center;gap:9px;color:#34485e;font:700 15px Manrope;margin:0 0 10px}.bible-favorites p{font-size:12px;line-height:1.6}.bible-footnote{font-size:10px;color:#9aa4ae;margin-top:13px;line-height:1.6}
 @media(max-width:700px){.bible-reader{width:92%;margin-top:24px}.bible-toolbar{grid-template-columns:1fr 1fr}.bible-version:first-child{grid-column:1/-1}.bible-reading-head h3{font-size:20px}.bible-verses{padding:10px}.bible-verse p{font-size:15px}.bible-intro h2{font-size:19px}}
+
+
+/* Apresentação profissional: transições, modelos e tela cheia */
+.presentation-stage{
+ width:100%;aspect-ratio:16/9;min-height:520px;max-height:calc(100vh - 210px);
+ background-size:cover;background-position:center;border-radius:16px;padding:clamp(18px,3vw,36px);
+ color:#fff;display:flex;flex-direction:column;justify-content:space-between;align-items:center;text-align:center;
+ box-shadow:0 18px 50px #10223535;overflow:hidden;position:relative;
+}
+.presentation-stage:fullscreen{width:100vw;height:100vh;max-height:none;min-height:0;aspect-ratio:auto;border-radius:0;padding:4vh 5vw;background-size:cover}
+.presentation-brand{font-size:clamp(9px,1vw,13px);letter-spacing:2px;color:#f0d69c;font-weight:800;text-shadow:0 2px 9px #0008}
+.presentation-copy{width:100%;max-width:1100px;margin:auto;padding:5vh 2vw;text-shadow:0 3px 18px #0009;animation:pv-slide-in .48s ease both}
+.presentation-title{font-size:clamp(30px,5vw,68px);font-weight:800;line-height:1.13;white-space:pre-wrap;letter-spacing:-1.2px}
+.presentation-body{font-size:clamp(19px,2.5vw,34px);line-height:1.5;margin-top:clamp(18px,3vh,34px);white-space:pre-wrap;color:#f4f6f8}
+.style-minimal{background-blend-mode:normal}
+.style-minimal .presentation-brand{color:#fff;letter-spacing:3px}
+.style-minimal .presentation-copy{max-width:900px;text-shadow:0 2px 12px #0006}
+.style-minimal .presentation-title{font-weight:600;letter-spacing:-.4px}
+.style-minimal .presentation-body{font-weight:400}
+.style-warm{background-image:linear-gradient(110deg,rgba(48,29,17,.82),rgba(91,59,29,.48)),var(--pv-bg);border:1px solid #d8b878}
+.style-warm .presentation-brand{color:#f5d99d}
+.style-warm .presentation-title{color:#fff1d2}
+.presentation-controls{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;color:#647487;font-size:12px}
+.presentation-control-actions{display:flex;gap:8px;align-items:center}
+.presentation-control{border:1px solid #dce5ec;border-radius:8px;background:#fff;color:#365873;padding:10px 13px;font-size:11px;font-weight:700}
+.presentation-control:disabled{opacity:.4;cursor:not-allowed}
+.presentation-stage .presentation-controls{color:#fff}
+.presentation-stage .presentation-control{background:#142b46cc;border-color:#ffffff55;color:#fff}
+.presentation-stage .presentation-control:disabled{opacity:.35}
+@keyframes pv-slide-in{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:700px){
+ .presentation-stage{aspect-ratio:auto;min-height:65vh;max-height:none;padding:18px}
+ .presentation-controls{flex-wrap:wrap;justify-content:center}
+ .presentation-control-actions{width:100%;justify-content:center;flex-wrap:wrap}
+ .presentation-body{margin-top:20px}
+ .presentation-stage:fullscreen{padding:3vh 4vw}
+}
