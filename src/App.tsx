@@ -154,7 +154,14 @@ export default function App(){
   if(result.error){setNotice('Não foi possível salvar. Confira se você criou a tabela presentations no Supabase.');return;}
   const saved=result.data as SavedPresentation;
   setPresentations(old=>activePresentation?old.map(p=>p.id===saved.id?saved:p):[saved,...old]);
-  setActivePresentation(saved);setNotice('Apresentação salva na nuvem.');
+  setActivePresentation(saved);
+  if(Array.isArray(saved.slides)&&saved.slides.length)setPresentationSlides(saved.slides);
+  setNotice('Apresentação salva na nuvem.');
+ };
+ const beginPresentation=()=>{
+  const slides=presentationSlides.length?presentationSlides:(activePresentation?.slides||[]);
+  if(!Array.isArray(slides)||!slides.length){setNotice('Esta apresentação ainda não tem slides para exibir.');return;}
+  setPresentationSlides(slides);setCurrentSlide(0);setPresentationMode(true);
  };
  const updateSlide=(id:string,field:'title'|'body',value:string)=>setPresentationSlides(old=>old.map(slide=>slide.id===id?{...slide,[field]:value}:slide));
  const addSlide=()=>{const slide={id:crypto.randomUUID(),title:'Novo slide',body:'',visualStyle};setPresentationSlides(old=>[...old,slide]);setCurrentSlide(presentationSlides.length);};
@@ -184,7 +191,7 @@ export default function App(){
   {notice&&<div style={{margin:'15px auto 0',width:'90%',maxWidth:1080,padding:12,borderRadius:8,background:'#f7f1e5',color:'#84672f',fontSize:12}}>{notice}</div>}
   {page==='EditorApresentacao'?<section className="content editor-page">
    <button className="back-link" onClick={()=>{setPresentationMode(false);setPage('Apresentações')}}><ArrowLeft size={16}/> Voltar às apresentações</button>
-   <div className="page-heading"><div><span className="eyebrow">EDITOR DE APRESENTAÇÃO</span><h1>{presentationTitle||'Nova apresentação'}</h1><p>Edite seus slides. O conteúdo continua sendo seu.</p></div><div className="editor-actions"><button className="preview-button" onClick={()=>setPresentationMode(v=>!v)}><Monitor size={16}/>{presentationMode?'Voltar ao editor':'Apresentar'}</button><button className="primary" onClick={savePresentation} disabled={presentationBusy}><Save size={17}/>{presentationBusy?'Salvando...':'Salvar apresentação'}</button></div></div>
+   <div className="page-heading"><div><span className="eyebrow">EDITOR DE APRESENTAÇÃO</span><h1>{presentationTitle||'Nova apresentação'}</h1><p>Edite seus slides. O conteúdo continua sendo seu.</p></div><div className="editor-actions"><button className="preview-button" onClick={()=>presentationMode?setPresentationMode(false):beginPresentation()}><Monitor size={16}/>{presentationMode?'Voltar ao editor':'Apresentar'}</button><button className="primary" onClick={savePresentation} disabled={presentationBusy}><Save size={17}/>{presentationBusy?'Salvando...':'Salvar apresentação'}</button></div></div>
    {!presentationMode?<div className="editor-card" style={{maxWidth:900}}>
     <label>Nome da apresentação</label><input className="title-input" value={presentationTitle} onChange={e=>setPresentationTitle(e.target.value)}/>
     <label>Modelo visual</label><select className="title-input" value={visualStyle} onChange={e=>changeVisualStyle(e.target.value)}><option value="cinematic">Cinematográfico — imagem e contraste</option><option value="minimal">Minimalista — elegante e limpo</option><option value="warm">Acolhedor — tons dourados</option></select>
