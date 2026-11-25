@@ -153,9 +153,18 @@ export default function App(){
   setPresentationSlides([{id:crypto.randomUUID(),title:'Título do slide',body:'Digite o conteúdo aqui.',visualStyle:'cinematic'}]);setVisualStyle('cinematic');
   setCurrentSlide(0);setPresentationMode(false);setNotice('');setPage('EditorApresentacao');
  };
- const editPresentation=(p:SavedPresentation)=>{
-  setActivePresentation(p);setPresentationTitle(p.title);setPresentationSermonId(p.sermon_id);
-  const slides=normalizeSlides(p.slides);setPresentationSlides(slides);setVisualStyle(slides[0]?.visualStyle||'cinematic');setCurrentSlide(0);setPresentationMode(false);setNotice('');setPage('EditorApresentacao');
+ const editPresentation=async(p:SavedPresentation)=>{
+  setNotice('Carregando os slides salvos...');
+  const result=await supabase.from('presentations').select('*').eq('id',p.id).single();
+  if(result.error){
+   setNotice('Não foi possível carregar esta apresentação da nuvem. Tente novamente.');
+   return;
+  }
+  const latest=result.data as SavedPresentation;
+  const slides=normalizeSlides(latest.slides);
+  setActivePresentation({...latest,slides});setPresentationTitle(latest.title);setPresentationSermonId(latest.sermon_id);
+  setPresentationSlides(slides);setVisualStyle(slides[0]?.visualStyle||'cinematic');setCurrentSlide(0);setPresentationMode(false);setNotice('');
+  setPage('EditorApresentacao');
  };
  const savePresentation=async()=>{
   if(!session?.user||!presentationTitle.trim()||!presentationSlides.length)return;
