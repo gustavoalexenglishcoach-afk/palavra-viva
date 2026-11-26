@@ -9,6 +9,27 @@ type PresentationSlide = { id:string; title:string; body:string; background?:str
 type SavedPresentation = { id:string; user_id:string; sermon_id:string|null; title:string; slides:PresentationSlide[]; created_at:string };
 type SermonDraft = { sermonType:string; baseText:string; objective:string; introduction:string; points:string[]; conclusion:string; references:string; notes:string };
 const emptyDraft = ():SermonDraft => ({sermonType:'',baseText:'',objective:'',introduction:'',points:['','',''],conclusion:'',references:'',notes:''});
+const validateSermon = (title:string,theme:string,draft:SermonDraft):string|null => {
+ if(title.trim().length>180)return 'O título está muito longo. Confira se você não colou um texto maior por engano.';
+ if(theme.trim().length>120)return 'O tema está muito longo. Confira o conteúdo antes de salvar.';
+ const fields:[string,string,number][]=[
+  ['Texto bíblico base',draft.baseText,2000],
+  ['Objetivo',draft.objective,5000],
+  ['Introdução',draft.introduction,15000],
+  ['Conclusão',draft.conclusion,15000],
+  ['Referências bíblicas',draft.references,5000],
+  ['Anotações pessoais',draft.notes,25000],
+  ...draft.points.map((point,index):[string,string,number]=>[`Tópico ${index+1}`,point,10000])
+ ];
+ for(const [label,value,max] of fields){
+  if(value.length>max)return `${label}: o texto ultrapassou o limite de segurança (${max.toLocaleString('pt-BR')} caracteres). Revise antes de salvar.`;
+ }
+ const combined=[title,theme,...fields.map(([,value])=>value)].join(' ').toLocaleLowerCase('pt-BR');
+ const uiClues=['bem-vindo à palavra viva','sincronizado na nuvem','mensagens salvas','workspace','visão geral','seu espaço de trabalho','suas mensagens recentes','prepare • organize • proclame','integração em breve'];
+ const matches=uiClues.filter(clue=>combined.includes(clue)).length;
+ if(matches>=3)return 'Este conteúdo parece conter partes da interface do Palavra Viva. Nada foi salvo. Revise os campos e tente novamente.';
+ return null;
+};
 const normalizeSlides = (raw:unknown):PresentationSlide[] => {
  let value=raw;
  if(typeof value==='string'){
@@ -104,6 +125,8 @@ export default function App(){
  const edit=(s:Sermon)=>{setActive(s);setTitle(s.title);setTheme(s.theme);setDraft(readDraft(s.content));setViewMode(false);setNotice('');setPage('Editor');};
  const save=async()=>{
   if(!title.trim()||!session?.user)return;
+  const validationError=validateSermon(title,theme,draft);
+  if(validationError){setNotice(validationError);return;}
   setSaving(true);setNotice('');
   const fields={title:title.trim(),theme:theme.trim()||'Sem categoria',date:new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'}),status:'Rascunho',content:JSON.stringify({format:'palavra-viva-v1',...draft})};
   const result=active
